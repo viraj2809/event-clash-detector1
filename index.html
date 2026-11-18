@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Event Sync</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: standard product page. Top bar, page title, then form on the left and status, timeline on the right; bookings table underneath. */
+:root{
+  --bg:#F6F7F9; --surface:#FFFFFF; --fg:#111827; --muted:#5B6472; --line:#E3E6EB;
+  --accent:#2457D6; --accent-fg:#FFFFFF; --soft:#EEF3FD;
+  --bad:#B42318; --bad-soft:#FEF0EE; --ok:#067647; --ok-soft:#E8F6EE; --on-strong:#FFFFFF;
+  --v0:#3B4CCA; --v1:#087F7C; --v2:#B83280; --v3:#B85C00; --v4:#4F7A12; --vtxt:#FFFFFF;
+  --font:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1319; --surface:#171C24; --fg:#E8EBF0; --muted:#9AA3B2; --line:#2A313C;
+    --accent:#7AA2FF; --accent-fg:#0F1319; --soft:#1C2740;
+    --bad:#FF8A7A; --bad-soft:#3A1F1F; --ok:#4ADE9A; --ok-soft:#14301F; --on-strong:#0F1319;
+    --v0:#8E9BFF; --v1:#4FD1CB; --v2:#F08CC4; --v3:#FFAA55; --v4:#A5D45A; --vtxt:#0F1319;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1319; --surface:#171C24; --fg:#E8EBF0; --muted:#9AA3B2; --line:#2A313C;
+  --accent:#7AA2FF; --accent-fg:#0F1319; --soft:#1C2740;
+  --bad:#FF8A7A; --bad-soft:#3A1F1F; --ok:#4ADE9A; --ok-soft:#14301F; --on-strong:#0F1319;
+  --v0:#8E9BFF; --v1:#4FD1CB; --v2:#F08CC4; --v3:#FFAA55; --v4:#A5D45A; --vtxt:#0F1319;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--fg); font:15px/1.55 var(--font);
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:0 48px;
+}
+.wrap{max-width:1120px;margin:0 auto;min-width:0}
+section{min-width:0}
+
+.topbar{border-bottom:1px solid var(--line);background:var(--surface);margin:0 calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.topin{max-width:1120px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 16px;padding:14px 0}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+.logo{width:22px;height:22px;border-radius:6px;background:var(--accent);display:inline-block;position:relative}
+.logo::after{content:"";position:absolute;left:5px;right:5px;top:5px;bottom:5px;border:2px solid var(--accent-fg);border-radius:2px}
+.sub{font-size:13px;color:var(--muted)}
+
+.title{padding:32px 0 24px}
+h1{font-size:clamp(24px,4vw,32px);line-height:1.2;font-weight:700;margin:0 0 6px;letter-spacing:-.01em;text-wrap:balance}
+.lede{margin:0;color:var(--muted);max-width:60ch}
+
+.grid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:880px){.grid{grid-template-columns:minmax(0,1fr)}}
+.stack{display:grid;gap:24px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;min-width:0}
+h2{font-size:16px;font-weight:600;margin:0 0 14px}
+.card-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin-bottom:14px}
+.card-head h2{margin:0}
+
+.field{display:grid;gap:6px;margin-bottom:14px;min-width:0}
+.field label{font-size:13px;font-weight:600}
+.hint{font-weight:400;color:var(--muted)}
+input,select{
+  width:100%;min-width:0;font:inherit;color:var(--fg);background:var(--surface);
+  border:1px solid var(--line);border-radius:6px;padding:9px 11px;
+}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+button{font:inherit;cursor:pointer;border-radius:6px}
+.primary{width:100%;background:var(--accent);color:var(--accent-fg);border:0;padding:11px 16px;font-weight:600;margin-top:4px}
+.ghost{background:transparent;color:var(--fg);border:1px solid var(--line);padding:6px 12px;font-size:13px}
+.ghost:hover{border-color:var(--accent)}
+.status{min-height:20px;margin:10px 0 0;font-size:13px;color:var(--muted)}
+.status.bad{color:var(--bad)} .status.ok{color:var(--ok)}
+
+.verdict{border-radius:10px;padding:18px 20px;background:var(--soft);border:1px solid var(--line)}
+.verdict[data-state="bad"]{background:var(--bad-soft);border-color:color-mix(in srgb,var(--bad) 35%,transparent)}
+.verdict[data-state="ok"]{background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+.s-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.badge{display:inline-block;font-size:12px;font-weight:600;padding:3px 10px;border-radius:99px;background:var(--accent);color:var(--accent-fg)}
+.verdict[data-state="bad"] .badge{background:var(--bad);color:var(--on-strong)}
+.verdict[data-state="ok"] .badge{background:var(--ok);color:var(--on-strong)}
+.s-title{font-weight:600}
+.s-text{margin:8px 0 0}
+.clashes{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px}
+.clashes li{display:flex;flex-wrap:wrap;gap:2px 12px;align-items:baseline}
+.c-name{font-weight:600}
+.c-meta{color:var(--muted);font-size:14px;font-variant-numeric:tabular-nums}
+.tags{display:inline-flex;gap:6px}
+.tag{font-size:11px;font-weight:600;color:var(--bad);border:1px solid var(--bad);border-radius:99px;padding:0 8px}
+.s-sub{margin:16px 0 8px;font-size:13px;font-weight:600;color:var(--muted)}
+.sugg{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:var(--surface);color:var(--fg);border:1px solid var(--line);padding:7px 12px;font-size:13px;font-variant-numeric:tabular-nums}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+
+.drag-hint{margin:-6px 0 12px;font-size:13px;color:var(--muted)}
+.tl-scroll{overflow-x:auto}
+.tl{min-width:600px;user-select:none;-webkit-user-select:none}
+.tl-head,.tl-row{display:grid;grid-template-columns:112px minmax(0,1fr);gap:10px;align-items:center}
+.tl-row{margin-top:6px}
+.tl-axis{position:relative;height:18px}
+.tl-axis span{position:absolute;top:0;font-size:11px;color:var(--muted);transform:translateX(-50%);font-variant-numeric:tabular-nums}
+.tl-axis span:first-child{transform:none}
+.tl-axis span:last-child{transform:translateX(-100%)}
+.tl-name{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;line-height:1.25}
+.tl-name i{flex:none;width:10px;height:10px;border-radius:3px}
+.tl-row.active .tl-name{font-weight:700}
+.tl-track{
+  position:relative;height:44px;cursor:crosshair;border-radius:4px;
+  background-image:linear-gradient(to right,var(--line) 1px,transparent 1px);background-size:calc(100%/12) 100%;
+  border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+}
+.tl-row.active .tl-track{background-color:color-mix(in srgb,var(--accent) 7%,transparent)}
+.bar{
+  position:absolute;top:10px;bottom:10px;border-radius:4px;padding:0 6px;font-size:11px;font-weight:600;line-height:24px;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;pointer-events:none;
+}
+.bar.drop{animation:drop .35s ease-out}
+@keyframes drop{from{transform:translateY(-8px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion: reduce){.bar.drop{animation:none}}
+.hatch{position:absolute;top:5px;bottom:5px;pointer-events:none;border:2px solid var(--bad);border-radius:3px;
+  background-image:repeating-linear-gradient(135deg,var(--bad) 0 3px,transparent 3px 7px)}
+.prop{position:absolute;top:2px;bottom:2px;pointer-events:none;border:2px dashed var(--ok);border-radius:5px;background:color-mix(in srgb,var(--ok) 16%,transparent)}
+.prop.bad{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;margin:12px 0 0;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:14px;height:10px;margin-right:6px;vertical-align:-1px}
+.legend .l-ok{border:2px dashed var(--ok)}
+.legend .l-bad{border:2px dashed var(--bad)}
+.legend .l-hatch{border:1px solid var(--bad);background-image:repeating-linear-gradient(135deg,var(--bad) 0 2px,transparent 2px 4px)}
+
+.bookings{margin-top:24px}
+.tbl-scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:560px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:baseline}
+th{font-size:12px;font-weight:600;color:var(--muted)}
+tbody tr:last-child td{border-bottom:0}
+td.t{white-space:nowrap;font-variant-numeric:tabular-nums}
+.dot{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:8px}
+.del{background:transparent;border:1px solid var(--line);color:var(--muted);padding:3px 10px;font-size:12px}
+.del:hover{border-color:var(--bad);color:var(--bad)}
+.empty{padding:18px 12px;color:var(--muted)}
+.tools{display:flex;gap:8px}
+.foot{margin-top:32px;font-size:13px;color:var(--muted);max-width:72ch}
+body.dragging,body.dragging *{cursor:crosshair!important;user-select:none}
+</style>
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+
+
+<div class="topbar">
+  <div class="topin">
+    <div class="brand"><span class="logo" aria-hidden="true"></span>Event Sync</div>
+    <span class="sub">College Event Clash Detection System</span>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="title">
+    <h1>Event scheduling</h1>
+    <p class="lede">Check a venue and time before you book it. Clashes with other events or the same organizer are flagged right away, with the nearest free options.</p>
+  </div>
+
+  <div class="grid">
+    <form class="card" id="form" autocomplete="off">
+      <h2>New event</h2>
+      <div class="field">
+        <label for="name">Event name</label>
+        <input id="name" type="text" placeholder="e.g. Dance Club Practice" value="Dance Club Practice" maxlength="60">
+      </div>
+      <div class="field">
+        <label for="venue">Venue</label>
+        <select id="venue"></select>
+      </div>
+      <div class="field">
+        <label for="date">Date</label>
+        <input id="date" type="date">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="start">Start</label>
+          <input id="start" type="time" value="16:00" min="08:00" max="20:00" step="900">
+        </div>
+        <div class="field">
+          <label for="end">End</label>
+          <input id="end" type="time" value="18:00" min="08:00" max="20:00" step="900">
+        </div>
+      </div>
+      <div class="field">
+        <label for="faculty">Organizer or faculty <span class="hint">(optional)</span></label>
+        <input id="faculty" type="text" placeholder="e.g. Prof. Kulkarni" maxlength="40">
+      </div>
+      <button class="primary" type="submit">Add event</button>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+    </form>
+
+    <div class="stack">
+      <section class="card">
+        <h2>Availability</h2>
+        <div class="verdict" id="verdict" data-state="idle" role="status" aria-live="polite">
+          <div class="s-head"><span class="badge" id="badge">Incomplete</span><span class="s-title" id="s-title"></span></div>
+          <div id="vdetail"></div>
+        </div>
+      </section>
+      <section class="card">
+        <h2 id="tl-title">Day timeline</h2>
+        <p class="drag-hint">Drag across a row to set the venue and time. On a touch screen, tap a row.</p>
+        <div class="tl-scroll"><div class="tl" id="tl"></div></div>
+        <div class="legend">
+          <span><i class="l-ok"></i>Your request, free</span>
+          <span><i class="l-bad"></i>Your request, clashing</span>
+          <span><i class="l-hatch"></i>Overlap</span>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card bookings">
+    <div class="card-head">
+      <h2 id="tbl-title">Bookings</h2>
+      <div class="tools">
+        <button class="ghost" type="button" id="reset">Reset samples</button>
+        <button class="ghost" type="button" id="clear">Clear all</button>
+      </div>
+    </div>
+    <div class="tbl-scroll"><table>
+      <thead><tr><th>Time</th><th>Event</th><th>Venue</th><th>Organizer</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </section>
+
+  <p class="foot">Mini project by Viraj, Shristi, Sanika and Rudraksha. The bookings shown at first are examples; use Clear all to start with an empty calendar. Events run between 08:00 and 20:00, and an event that ends when another begins is not a clash.</p>
+</div>
+
+<script>
+/* LOGIC-START */
+const DAY_START = 8 * 60, DAY_END = 20 * 60;
+const VENUES = ['Seminar Hall A', 'Seminar Hall B', 'Auditorium', 'Computer Lab 1', 'Open Air Theatre'];
+let events = [];
+let nextId = 1;
+let vIdx = new Map();   // "venue|date" -> bookings sorted by start
+let fIdx = new Map();   // "organizer|date" -> bookings sorted by start
+
+const pad = n => String(n).padStart(2, '0');
+const fmt = m => pad(Math.floor(m / 60)) + ':' + pad(m % 60);
+const parse = t => { if (!t) return NaN; const p = t.split(':').map(Number); return p[0] * 60 + p[1]; };
+
+function insertSorted(arr, ev) {
+  let lo = 0, hi = arr.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (arr[mid].start < ev.start) lo = mid + 1; else hi = mid; }
+  arr.splice(lo, 0, ev);
+}
+const facKey = (f, d) => f.trim().toLowerCase() + '|' + d;
+function addToIndex(ev) {
+  const kv = ev.venue + '|' + ev.date;
+  if (!vIdx.has(kv)) vIdx.set(kv, []);
+  insertSorted(vIdx.get(kv), ev);
+  if (ev.faculty) {
+    const kf = facKey(ev.faculty, ev.date);
+    if (!fIdx.has(kf)) fIdx.set(kf, []);
+    insertSorted(fIdx.get(kf), ev);
+  }
+}
+function rebuild() { vIdx = new Map(); fIdx = new Map(); events.forEach(addToIndex); }
+
+/* Bookings in one bucket never overlap each other, so their end times are sorted too.
+   Binary search finds the first booking that ends after the request starts. */
+function firstEndAfter(arr, s, c) {
+  let lo = 0, hi = arr.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; c.n++; if (arr[mid].end > s) hi = mid; else lo = mid + 1; }
+  return lo;
+}
+function findOverlaps(arr, s, e, c) {
+  const out = [];
+  let i = firstEndAfter(arr, s, c);
+  while (i < arr.length) { c.n++; if (arr[i].start < e) { out.push(arr[i]); i++; } else break; }
+  return out;
+}
+function check(req) {
+  const c = { n: 0 };
+  const kv = req.venue + '|' + req.date;
+  const vb = vIdx.get(kv) || [];
+  const venue = findOverlaps(vb, req.start, req.end, c);
+  let fb = [], fac = [];
+  const kf = req.faculty ? facKey(req.faculty, req.date) : null;
+  if (kf) { fb = fIdx.get(kf) || []; fac = findOverlaps(fb, req.start, req.end, c); }
+  return { venue, fac, cmp: c.n, kv, kf, vb, fb };
+}
+
+class MinHeap {
+  constructor() { this.h = []; }
+  less(i, j) { const a = this.h[i], b = this.h[j]; return a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]); }
+  swap(i, j) { const t = this.h[i]; this.h[i] = this.h[j]; this.h[j] = t; }
+  push(x) {
+    this.h.push(x);
+    let i = this.h.length - 1;
+    while (i > 0) { const p = (i - 1) >> 1; if (this.less(i, p)) { this.swap(i, p); i = p; } else break; }
+  }
+  pop() {
+    const h = this.h;
+    if (!h.length) return null;
+    const top = h[0], last = h.pop();
+    if (h.length) {
+      h[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1, r = l + 1; let m = i;
+        if (l < h.length && this.less(l, m)) m = l;
+        if (r < h.length && this.less(r, m)) m = r;
+        if (m === i) break;
+        this.swap(i, m); i = m;
+      }
+    }
+    return top;
+  }
+  get size() { return this.h.length; }
+}
+function mergeBusy(list) {
+  const s = list.slice().sort((a, b) => a.start - b.start), out = [];
+  for (const x of s) {
+    const last = out[out.length - 1];
+    if (last && x.start <= last.end) last.end = Math.max(last.end, x.end);
+    else out.push({ start: x.start, end: x.end });
+  }
+  return out;
+}
+function suggest(req, res) {
+  const dur = req.end - req.start;
+  const busy = mergeBusy(res.vb.concat(res.fb));
+  const gaps = [];
+  let cur = DAY_START;
+  for (const b of busy) { if (b.start - cur >= dur) gaps.push([cur, b.start]); cur = Math.max(cur, b.end); }
+  if (DAY_END - cur >= dur) gaps.push([cur, DAY_END]);
+  const heap = new MinHeap();
+  for (const g of gaps) {
+    const cs = Math.min(Math.max(req.start, g[0]), g[1] - dur);
+    heap.push([Math.abs(cs - req.start), cs]);
+  }
+  const slots = [];
+  while (heap.size && slots.length < 3) slots.push(heap.pop()[1]);
+  const venues = [];
+  if (!res.fac.length) {
+    for (const v of VENUES) {
+      if (v === req.venue) continue;
+      const b = vIdx.get(v + '|' + req.date) || [];
+      if (!findOverlaps(b, req.start, req.end, { n: 0 }).length) venues.push(v);
+    }
+  }
+  return { slots, venues: venues.slice(0, 3) };
+}
+function validate(r) {
+  if (!r.date) return 'Pick a date.';
+  if (isNaN(r.start) || isNaN(r.end)) return 'Enter a start and end time.';
+  if (r.end <= r.start) return 'The end time must be after the start time.';
+  if (r.start < DAY_START || r.end > DAY_END) return 'Events run between 08:00 and 20:00.';
+  return null;
+}
+/* LOGIC-END */
+
+(function () {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const KEY = 'event-clash-detector-v1';
+  const vi = v => Math.max(0, VENUES.indexOf(v));
+
+  function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function addDays(n) { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); }
+  function dayLabel(s) {
+    try { return new Date(s + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }); }
+    catch (e) { return s; }
+  }
+
+  let base = addDays(2), lastAdded = null, drag = null;
+
+  function seeds(b) {
+    const d = b, d2 = (function () { const x = new Date(b + 'T00:00:00'); x.setDate(x.getDate() + 1); return ymd(x); })();
+    return [
+      { name: 'Hackathon Kickoff', venue: 'Seminar Hall A', date: d, start: 540, end: 660, faculty: 'Prof. Joshi' },
+      { name: 'Tech Talk: AI', venue: 'Seminar Hall A', date: d, start: 900, end: 1020, faculty: 'Prof. Kulkarni' },
+      { name: 'Placement Briefing', venue: 'Auditorium', date: d, start: 600, end: 720, faculty: 'Training Cell' },
+      { name: 'Cultural Rehearsal', venue: 'Auditorium', date: d, start: 1020, end: 1140, faculty: '' },
+      { name: 'Python Workshop', venue: 'Computer Lab 1', date: d, start: 840, end: 1020, faculty: 'Prof. Rao' },
+      { name: 'Alumni Meet', venue: 'Seminar Hall B', date: d2, start: 660, end: 780, faculty: '' }
+    ].map((e, i) => Object.assign({ id: i + 1 }, e));
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify({ events: events, nextId: nextId, base: base })); } catch (e) {} }
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d && Array.isArray(d.events) && d.events.every(e => e && typeof e.venue === 'string' && typeof e.date === 'string' && typeof e.start === 'number' && typeof e.end === 'number')) return d;
+      }
+    } catch (e) {}
+    return null;
+  }
+  function restoreSeeds() { base = addDays(2); events = seeds(base); nextId = events.length + 1; rebuild(); save(); }
+
+  function readReq() {
+    return {
+      name: $('name').value.trim(), venue: $('venue').value, date: $('date').value,
+      start: parse($('start').value), end: parse($('end').value), faculty: $('faculty').value.trim()
+    };
+  }
+
+  function renderStatus(r, res, err) {
+    const box = $('verdict'), det = $('vdetail');
+    if (err) {
+      box.dataset.state = 'idle'; $('badge').textContent = 'Incomplete'; $('s-title').textContent = '';
+      det.innerHTML = '<p class="s-text">' + esc(err) + '</p>';
+      return;
+    }
+    const map = new Map();
+    res.venue.forEach(e => map.set(e.id, { e: e, why: ['Same venue'] }));
+    res.fac.forEach(e => { const m = map.get(e.id); if (m) m.why.push('Same organizer'); else map.set(e.id, { e: e, why: ['Same organizer'] }); });
+    if (!map.size) {
+      box.dataset.state = 'ok'; $('badge').textContent = 'Available';
+      $('s-title').textContent = r.venue + ' is free';
+      det.innerHTML = '<p class="s-text">' + esc(r.venue) + ' is free from ' + fmt(r.start) + ' to ' + fmt(r.end) + ' on ' + esc(dayLabel(r.date)) + '.' +
+        (r.faculty ? ' ' + esc(r.faculty) + ' has nothing else in that window.' : '') + '</p>';
+      return;
+    }
+    box.dataset.state = 'bad'; $('badge').textContent = 'Clash detected';
+    $('s-title').textContent = 'Overlaps ' + map.size + (map.size > 1 ? ' bookings' : ' booking');
+    let h = '<ul class="clashes">';
+    map.forEach(x => {
+      h += '<li><span class="c-name">' + esc(x.e.name) + '</span><span class="c-meta">' + esc(x.e.venue) + ', ' + fmt(x.e.start) + ' to ' + fmt(x.e.end) +
+        '</span><span class="tags">' + x.why.map(w => '<span class="tag">' + w + '</span>').join('') + '</span></li>';
+    });
+    h += '</ul>';
+    const dur = r.end - r.start, sg = suggest(r, res);
+    if (sg.slots.length || sg.venues.length) {
+      h += '<p class="s-sub">Available instead</p><div class="sugg">';
+      sg.slots.forEach(s => { h += '<button type="button" class="chip" data-venue="' + esc(r.venue) + '" data-start="' + s + '">' + fmt(s) + ' to ' + fmt(s + dur) + ' at ' + esc(r.venue) + '</button>'; });
+      sg.venues.forEach(n => { h += '<button type="button" class="chip" data-venue="' + esc(n) + '" data-start="' + r.start + '">' + fmt(r.start) + ' to ' + fmt(r.end) + ' at ' + esc(n) + '</button>'; });
+      h += '</div>';
+    } else {
+      h += '<p class="s-text">No free slot of that length is left between 08:00 and 20:00.</p>';
+    }
+    det.innerHTML = h;
+  }
+
+  function renderTimeline(r, res, err, date) {
+    $('tl-title').textContent = 'Day timeline, ' + dayLabel(date);
+    const span = DAY_END - DAY_START;
+    const pos = (s, e) => 'left:' + ((s - DAY_START) / span * 100) + '%;width:' + ((e - s) / span * 100) + '%';
+    const conf = (!err && res) ? res.venue.concat(res.fac) : [];
+    let h = '<div class="tl-head"><span></span><div class="tl-axis">';
+    for (let m = DAY_START; m <= DAY_END; m += 120) h += '<span style="left:' + ((m - DAY_START) / span * 100) + '%">' + fmt(m) + '</span>';
+    h += '</div></div>';
+    VENUES.forEach((v, i) => {
+      const arr = vIdx.get(v + '|' + date) || [];
+      h += '<div class="tl-row' + (v === r.venue ? ' active' : '') + '"><span class="tl-name"><i style="background:var(--v' + i + ')"></i>' + esc(v) + '</span><div class="tl-track" data-venue="' + esc(v) + '">';
+      arr.forEach(e => {
+        h += '<div class="bar' + (e.id === lastAdded ? ' drop' : '') + '" style="' + pos(e.start, e.end) + ';background:var(--v' + i + ');color:var(--vtxt)" title="' + esc(e.name + ', ' + fmt(e.start) + ' to ' + fmt(e.end)) + '">' + esc(e.name) + '</div>';
+      });
+      if (!err && v === r.venue && r.date === date) {
+        h += '<div class="prop' + (conf.length ? ' bad' : '') + '" style="' + pos(r.start, r.end) + '"></div>';
+      }
+      if (!err && r.date === date) {
+        const seen = new Set();
+        conf.forEach(e => {
+          if (e.venue !== v || seen.has(e.id)) return; seen.add(e.id);
+          const a = Math.max(r.start, e.start), b = Math.min(r.end, e.end);
+          if (b > a) h += '<div class="hatch" style="' + pos(a, b) + '"></div>';
+        });
+      }
+      h += '</div></div>';
+    });
+    $('tl').innerHTML = h;
+  }
+
+  function renderTable(date) {
+    $('tbl-title').textContent = 'Bookings on ' + dayLabel(date);
+    const rows = events.filter(e => e.date === date).sort((a, b) => a.start - b.start || a.venue.localeCompare(b.venue));
+    const body = $('rows');
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No bookings on this date yet.</td></tr>'; return; }
+    body.innerHTML = rows.map(e =>
+      '<tr><td class="t">' + fmt(e.start) + ' to ' + fmt(e.end) + '</td><td>' + esc(e.name) + '</td><td><i class="dot" style="background:var(--v' + vi(e.venue) + ')"></i>' + esc(e.venue) + '</td><td>' + (e.faculty ? esc(e.faculty) : '') +
+      '</td><td><button type="button" class="del" data-id="' + e.id + '" aria-label="Delete ' + esc(e.name) + '">Delete</button></td></tr>'
+    ).join('');
+  }
+
+  function update() {
+    const r = readReq(), err = validate(r), res = err ? null : check(r);
+    const date = r.date || base;
+    renderStatus(r, res, err);
+    renderTimeline(r, res, err, date);
+    renderTable(date);
+  }
+  function say(msg, kind) { const s = $('status'); s.textContent = msg; s.className = 'status' + (kind ? ' ' + kind : ''); }
+  function setTimes(s, e, venue) {
+    if (venue) $('venue').value = venue;
+    $('start').value = fmt(s); $('end').value = fmt(e);
+    say(''); update();
+  }
+
+  /* setup */
+  $('venue').innerHTML = VENUES.map(v => '<option>' + esc(v) + '</option>').join('');
+  const saved = load();
+  if (saved) {
+    events = saved.events;
+    nextId = saved.nextId || (events.reduce((m, e) => Math.max(m, e.id), 0) + 1);
+    base = saved.base || (events[0] ? events[0].date : base);
+  } else { events = seeds(base); nextId = events.length + 1; }
+  rebuild();
+  $('date').value = base;
+
+  ['name', 'venue', 'date', 'start', 'end', 'faculty'].forEach(id => {
+    $(id).addEventListener('input', () => { say(''); update(); });
+    $(id).addEventListener('change', () => { say(''); update(); });
+  });
+
+  $('form').addEventListener('submit', ev => {
+    ev.preventDefault();
+    const r = readReq(), err = validate(r);
+    if (!r.name) { say('Give the event a name first.', 'bad'); $('name').focus(); return; }
+    if (err) { say(err, 'bad'); return; }
+    const res = check(r);
+    if (res.venue.length || res.fac.length) { say('Not added. Resolve the clash shown above first.', 'bad'); return; }
+    const e = { id: nextId++, name: r.name, venue: r.venue, date: r.date, start: r.start, end: r.end, faculty: r.faculty };
+    events.push(e); addToIndex(e); save();
+    say('Added ' + r.name + ' to ' + r.venue + ' at ' + fmt(r.start) + '.', 'ok');
+    const dur = r.end - r.start;
+    $('name').value = '';
+    if (r.end + dur <= DAY_END) { $('start').value = fmt(r.end); $('end').value = fmt(r.end + dur); }
+    lastAdded = e.id; update(); lastAdded = null;
+  });
+
+  $('vdetail').addEventListener('click', ev => {
+    const b = ev.target.closest('.chip');
+    if (!b) return;
+    const r = readReq(), dur = r.end - r.start, s = Number(b.dataset.start);
+    setTimes(s, s + dur, b.dataset.venue);
+  });
+  $('rows').addEventListener('click', ev => {
+    const b = ev.target.closest('.del');
+    if (!b) return;
+    const id = Number(b.dataset.id);
+    events = events.filter(e => e.id !== id);
+    rebuild(); save(); say('Booking removed.'); update();
+  });
+  $('reset').addEventListener('click', () => { restoreSeeds(); $('date').value = base; say('Sample bookings restored.'); update(); });
+  $('clear').addEventListener('click', () => { events = []; rebuild(); save(); say('Calendar cleared.'); update(); });
+
+  /* drag on the timeline to set venue and time */
+  const snap = m => Math.max(DAY_START, Math.min(DAY_END, Math.round(m / 15) * 15));
+  function place(a, dur, venue) {
+    let s = a, e = a + dur;
+    if (e > DAY_END) { e = DAY_END; s = Math.max(DAY_START, e - dur); }
+    setTimes(s, e, venue);
+  }
+  $('tl').addEventListener('pointerdown', ev => {
+    const tr = ev.target.closest('.tl-track');
+    if (!tr || (ev.button && ev.button > 0)) return;
+    const rect = tr.getBoundingClientRect(), cur = readReq();
+    const dur = (isNaN(cur.start) || isNaN(cur.end) || cur.end <= cur.start) ? 120 : cur.end - cur.start;
+    const toMin = x => DAY_START + (x - rect.left) / rect.width * (DAY_END - DAY_START);
+    drag = { rect: rect, venue: tr.dataset.venue, a: snap(toMin(ev.clientX)), x0: ev.clientX, toMin: toMin, dur: dur, moved: false, touch: ev.pointerType === 'touch' };
+    if (!drag.touch) { document.body.classList.add('dragging'); place(drag.a, dur, drag.venue); }
+  });
+  document.addEventListener('pointermove', ev => {
+    if (!drag || drag.touch) return;
+    if (!drag.moved && Math.abs(ev.clientX - drag.x0) < 4) return;
+    drag.moved = true;
+    const b = snap(drag.toMin(ev.clientX));
+    let s = Math.min(drag.a, b), e = Math.max(drag.a, b);
+    if (e - s < 15) { if (b >= drag.a) e = Math.min(DAY_END, s + 15); else s = Math.max(DAY_START, e - 15); }
+    setTimes(s, e, drag.venue);
+  });
+  document.addEventListener('pointerup', () => {
+    if (!drag) return;
+    if (drag.touch) place(drag.a, drag.dur, drag.venue);
+    drag = null; document.body.classList.remove('dragging');
+  });
+  document.addEventListener('pointercancel', () => { drag = null; document.body.classList.remove('dragging'); });
+
+  update();
+})();
+</script>
+
+</body>
+</html>
